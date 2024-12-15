@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Win Meter</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            height: 100vh;
+            margin: 0;
+            font-family: Arial, sans-serif;
+        }
+
+        .player-one-component {
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            height: 200px;
+        }
+
+        .meter {
+            display: flex;
+            flex-direction: column-reverse;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .meter.top {
+            flex-direction: column;
+        }
+
+        .unit {
+            width: 50px;
+            height: 20px;
+            background-color: lightgrey;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+        }
+
+        .unit.active {
+            background-color: green;
+        }
+
+        .unit.red-active {
+            background-color: red;
+        }
+
+        .win-box {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 200px;
+            height: 50px;
+            background-color: lightgrey;
+            border: 2px solid #ccc;
+            border-radius: 5px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: black;
+            padding: 0 10px;
+        }
+
+        .win-box.win-green {
+            background-color: green;
+            color: white;
+        }
+
+        .win-box.win-red {
+            background-color: red;
+            color: white;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        .reset-button {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            background-color: #FF5733;
+        }
+
+        .reset-button:hover {
+            background-color: #C13C24;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="player-one-component">
+        <button id="topButton" style="background-color: red;">Player 2</button>
+        <div class="meter top" id="topMeter">
+            <!-- 5 units -->
+            <div class="unit"></div>
+            <div class="unit"></div>
+            <div class="unit"></div>
+            <div class="unit"></div>
+            <div class="unit"></div>
+        </div>
+    </div>
+
+    <div class="win-box" id="winBox"><span id="player1Score">0</span> PLAY GAME! <span id="player2Score">0</span></div>
+
+    <div class="player-one-component">
+        <div class="meter" id="bottomMeter">
+            <!-- 5 units -->
+            <div class="unit"></div>
+            <div class="unit"></div>
+            <div class="unit"></div>
+            <div class="unit"></div>
+            <div class="unit"></div>
+        </div>
+        <button id="incrementButton" style="background-color: green;">bluwu</button>
+    </div>
+
+    <button id="resetButton" class="reset-button">Reset</button>
+
+    <script>
+        const ws = new WebSocket('ws://localhost:8080');
+
+        // Bottom meter logic
+        const bottomUnits = document.querySelectorAll('#bottomMeter .unit');
+        const incrementButton = document.getElementById('incrementButton');
+        let currentActiveBottom = 0;
+
+        // Top meter logic
+        const topUnits = document.querySelectorAll('#topMeter .unit');
+        const topButton = document.getElementById('topButton');
+        let currentActiveTop = 0;
+
+        // Win Box Logic
+        const winBox = document.getElementById('winBox');
+        const player1Score = document.getElementById('player1Score');
+        const player2Score = document.getElementById('player2Score');
+        let scorePlayer1 = 0;
+        let scorePlayer2 = 0;
+
+        function checkWin() {
+            if (currentActiveTop === topUnits.length) {
+                winBox.className = 'win-box win-red';
+                winBox.childNodes[1].textContent = ' WIN ';
+            } else if (currentActiveBottom === bottomUnits.length) {
+                winBox.className = 'win-box win-green';
+                winBox.childNodes[1].textContent = ' WIN ';
+            }
+        }
+
+        // WebSocket: Synchronize incoming events
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            if (data.type === 'increment' && data.player === 'player1') {
+                updateBottomMeter(data.score);
+            } else if (data.type === 'increment' && data.player === 'player2') {
+                updateTopMeter(data.score);
+            } else if (data.type === 'reset') {
+                resetGame();
+            }
+        };
+
+        function updateBottomMeter(score) {
+            if (currentActiveBottom < bottomUnits.length) {
+                bottomUnits[currentActiveBottom].classList.add('active');
+                currentActiveBottom++;
+                scorePlayer1 = score;
+                player1Score.textContent = scorePlayer1;
+                checkWin();
+            }
+        }
+
+        function updateTopMeter(score) {
+            if (currentActiveTop < topUnits.length) {
+                topUnits[currentActiveTop].classList.add('red-active');
+                currentActiveTop++;
+                scorePlayer2 = score;
+                player2Score.textContent = scorePlayer2;
+                checkWin();
+            }
+        }
+
+        // Send events to server
+        incrementButton.addEventListener('click', () => {
+            if (currentActiveBottom < bottomUnits.length) {
+                scorePlayer1++;
+                ws.send(JSON.stringify({ type: 'increment', player: 'player1', score: scorePlayer1 }));
+            }
+        });
+
+        topButton.addEventListener('click', () => {
+            if (currentActiveTop < topUnits.length) {
+                scorePlayer2++;
+                ws.send(JSON.stringify({ type: 'increment', player: 'player2', score: scorePlayer2 }));
+            }
+        });
+
+        // Reset button logic
+        const resetButton = document.getElementById('resetButton');
+        resetButton.addEventListener('click', () => {
+            ws.send(JSON.stringify({ type: 'reset' }));
+        });
+
+        function resetGame() {
+            // Reset scores
+            scorePlayer1 = 0;
+            scorePlayer2 = 0;
+            player1Score.textContent = '0';
+            player2Score.textContent = '0';
+
+            // Reset win box text
+            winBox.className = 'win-box';
+            winBox.childNodes[1].textContent = ' PLAY GAME! ';
+
+            // Reset meters
+            currentActiveBottom = 0;
+            currentActiveTop = 0;
+            bottomUnits.forEach(unit => unit.classList.remove('active'));
+            topUnits.forEach(unit => unit.classList.remove('red-active'));
+        }
+    </script>
+
+</body>
+</html>
